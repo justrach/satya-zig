@@ -1,14 +1,73 @@
 {
   "name": "dhi",
+  "version": "0.3.0",
+  "description": "Ultra-fast validation library - 1.64x faster than Zod. Drop-in replacement with WASM performance.",
+  "main": "index.ts",
   "module": "index.ts",
+  "types": "schema.ts",
   "type": "module",
+  "keywords": [
+    "validation",
+    "schema",
+    "validator",
+    "zod",
+    "fast",
+    "wasm",
+    "typescript",
+    "runtime",
+    "type-checking"
+  ],
+  "author": "dhi team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/justrach/satya-zig.git",
+    "directory": "js-bindings"
+  },
+  "homepage": "https://github.com/justrach/satya-zig#readme",
+  "bugs": {
+    "url": "https://github.com/justrach/satya-zig/issues"
+  },
+  "files": [
+    "*.ts",
+    "*.wasm",
+    "*.md",
+    "!benchmark-*.ts",
+    "!test-*.ts"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "bench": "bun run benchmark-final.ts",
+    "build": "echo 'WASM pre-built'",
+    "prepublishOnly": "echo 'WASM already included'"
+  },
+  "exports": {
+    ".": {
+      "import": "./index.ts",
+      "types": "./schema.ts"
+    },
+    "./schema": {
+      "import": "./schema.ts",
+      "types": "./schema.ts"
+    },
+    "./turbo": {
+      "import": "./schema-turbo.ts",
+      "types": "./schema-turbo.ts"
+    }
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
-  "dependencies": {
-    "zod": "^4.1.11"
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

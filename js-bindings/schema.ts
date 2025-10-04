@@ -599,9 +599,95 @@ export class ArraySchema<T> extends Schema<T[]> {
 
 export class ObjectSchema<T extends Record<string, any>> extends Schema<T> {
   _type: ZodType = "object";
+  private _turboBatch?: (items: any[]) => boolean[];
   
   constructor(private shape: { [K in keyof T]: Schema<T[K]> }) {
     super();
+    this._setupTurboBatch();
+  }
+  
+  private _setupTurboBatch() {
+    // Check if all fields can use TURBO mode
+    const entries = Object.entries(this.shape);
+    const allSimple = entries.every(([_, schema]) => {
+      if (schema instanceof StringSchema) {
+        return !schema._email && !schema._url && !schema._uuid && 
+               !schema._ipv4 && !schema._isoDate && !schema._isoDatetime && !schema._base64;
+      }
+      if (schema instanceof NumberSchema) {
+        return true; // All number validations are fast
+      }
+      return false;
+    });
+    
+    if (!allSimple) return;
+    
+    // Setup TURBO batch function
+    this._turboBatch = (items: any[]) => {
+      const results = new Array(items.length).fill(true);
+      
+      for (const [key, schema] of entries) {
+        if (schema instanceof StringSchema && schema._min !== undefined && schema._max !== undefined) {
+          // Use TURBO string length validation
+          const count = items.length;
+          const lengthsPtr = wasm.alloc(count * 4);
+          const resultsPtr = wasm.alloc(count);
+          
+          const lengthsArray = new Uint32Array(wasm.memory.buffer, lengthsPtr, count);
+          for (let i = 0; i < count; i++) {
+            const val = items[i][key];
+            lengthsArray[i] = val ? String(val).length : 0;
+          }
+          
+          wasm.validate_string_lengths_batch(count, lengthsPtr, schema._min, schema._max, resultsPtr);
+          
+          const fieldResults = new Uint8Array(wasm.memory.buffer, resultsPtr, count);
+          for (let i = 0; i < count; i++) {
+            results[i] = results[i] && fieldResults[i] === 1;
+          }
+          
+          wasm.dealloc(lengthsPtr, count * 4);
+          wasm.dealloc(resultsPtr, count);
+        } else if (schema instanceof NumberSchema && schema._min !== undefined && schema._max !== undefined) {
+          // Use TURBO number validation
+          const count = items.length;
+          const numbersPtr = wasm.alloc(count * 8);
+          const resultsPtr = wasm.alloc(count);
+          
+          const numbersArray = new Float64Array(wasm.memory.buffer, numbersPtr, count);
+          for (let i = 0; i < count; i++) {
+            numbersArray[i] = items[i][key] || 0;
+          }
+          
+          wasm.validate_numbers_batch(count, numbersPtr, schema._min, schema._max, resultsPtr);
+          
+          const fieldResults = new Uint8Array(wasm.memory.buffer, resultsPtr, count);
+          for (let i = 0; i < count; i++) {
+            results[i] = results[i] && fieldResults[i] === 1;
+          }
+          
+          wasm.dealloc(numbersPtr, count * 8);
+          wasm.dealloc(resultsPtr, count);
+        }
+      }
+      
+      return results;
+    };
+  }
+  
+  // TURBO: Batch validation
+  validateBatch(items: T[]): ValidationResult<T>[] {
+    if (this._turboBatch && items.length > 100) {
+      const results = this._turboBatch(items);
+      return results.map((valid, i) => 
+        valid 
+          ? { success: true, data: items[i] }
+          : { success: false, error: { issues: [{ path: [], message: 'Validation failed', code: 'invalid' }] } }
+      );
+    }
+    
+    // Fallback to regular validation
+    return items.map(item => this._validate(item, []));
   }
   
   _validate(value: any, path: (string | number)[]): ValidationResult<T> {
