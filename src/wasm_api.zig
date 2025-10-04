@@ -85,6 +85,48 @@ export fn validate_float_finite(value: f64) bool {
     return validators.validateFinite(value);
 }
 
+// Batch validation - validates multiple items at once
+// Returns a pointer to boolean array
+export fn validate_batch(
+    items_ptr: [*]const u8,
+    items_len: usize,
+    num_items: usize,
+    validator_type: u8,
+    _: i64,
+    _: i64,
+) ?[*]u8 {
+    // Allocate result array
+    const results = std.heap.wasm_allocator.alloc(u8, num_items) catch return null;
+    
+    // For now, simple implementation - can be optimized further
+    var offset: usize = 0;
+    for (0..num_items) |i| {
+        // Read string length (4 bytes)
+        if (offset + 4 > items_len) break;
+        const str_len = @as(u32, @bitCast([4]u8{
+            items_ptr[offset],
+            items_ptr[offset + 1],
+            items_ptr[offset + 2],
+            items_ptr[offset + 3],
+        }));
+        offset += 4;
+        
+        if (offset + str_len > items_len) break;
+        const str = items_ptr[offset..offset + str_len];
+        offset += str_len;
+        
+        // Validate based on type
+        results[i] = switch (validator_type) {
+            0 => if (validators.validateEmail(str)) 1 else 0,
+            1 => if (validators.validateUrl(str)) 1 else 0,
+            2 => if (validators.validateUuid(str)) 1 else 0,
+            else => 0,
+        };
+    }
+    
+    return results.ptr;
+}
+
 // Memory allocation for JavaScript
 export fn alloc(size: usize) ?[*]u8 {
     const slice = std.heap.wasm_allocator.alloc(u8, size) catch return null;

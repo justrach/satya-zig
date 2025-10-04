@@ -147,7 +147,7 @@ console.log(results); // [{ valid: true }, { valid: true }]
 - **GitHub**: https://github.com/justrach/satya-zig
 - **Python version**: https://pypi.org/project/dhi/ (27M validations/sec!)
 
-## �� License
+## 📄 License
 
 MIT
 
