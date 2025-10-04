@@ -44,6 +44,25 @@ export fn validate_base64(ptr: [*]const u8, len: usize) bool {
     return validators.validateBase64(data);
 }
 
+// Additional string validators
+export fn validate_starts_with(str_ptr: [*]const u8, str_len: usize, prefix_ptr: [*]const u8, prefix_len: usize) bool {
+    const str = str_ptr[0..str_len];
+    const prefix = prefix_ptr[0..prefix_len];
+    return validators.validateStartsWith(str, prefix);
+}
+
+export fn validate_ends_with(str_ptr: [*]const u8, str_len: usize, suffix_ptr: [*]const u8, suffix_len: usize) bool {
+    const str = str_ptr[0..str_len];
+    const suffix = suffix_ptr[0..suffix_len];
+    return validators.validateEndsWith(str, suffix);
+}
+
+export fn validate_contains(str_ptr: [*]const u8, str_len: usize, substring_ptr: [*]const u8, substring_len: usize) bool {
+    const str = str_ptr[0..str_len];
+    const substring = substring_ptr[0..substring_len];
+    return validators.validateContains(str, substring);
+}
+
 // Number validators
 export fn validate_int(value: i64, min: i64, max: i64) bool {
     return value >= min and value <= max;
@@ -83,6 +102,74 @@ export fn validate_float_gt(value: f64, min: f64) bool {
 
 export fn validate_float_finite(value: f64) bool {
     return validators.validateFinite(value);
+}
+
+// Additional number validators
+export fn validate_int_negative(value: i64) bool {
+    return validators.validateNegative(i64, value);
+}
+
+export fn validate_int_nonpositive(value: i64) bool {
+    return validators.validateNonPositive(i64, value);
+}
+
+export fn validate_float_negative(value: f64) bool {
+    return validators.validateNegative(f64, value);
+}
+
+export fn validate_float_nonpositive(value: f64) bool {
+    return validators.validateNonPositive(f64, value);
+}
+
+export fn validate_float_gte(value: f64, min: f64) bool {
+    return validators.validateGte(f64, value, min);
+}
+
+export fn validate_float_lt(value: f64, max: f64) bool {
+    return validators.validateLt(f64, value, max);
+}
+
+export fn validate_float_lte(value: f64, max: f64) bool {
+    return validators.validateLte(f64, value, max);
+}
+
+export fn validate_float_multiple_of(value: f64, divisor: f64) bool {
+    return validators.validateMultipleOf(f64, value, divisor);
+}
+
+// ULTRA-FAST: Batch string length validation (no encoding needed!)
+export fn validate_string_lengths_batch(
+    count: u32,
+    lengths_ptr: [*]const u32,
+    min: u32,
+    max: u32,
+    results_ptr: [*]u8
+) void {
+    const lengths = lengths_ptr[0..count];
+    const results = results_ptr[0..count];
+    
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        results[i] = if (lengths[i] >= min and lengths[i] <= max) 1 else 0;
+    }
+}
+
+// ULTRA-FAST: Batch number validation
+export fn validate_numbers_batch(
+    count: u32,
+    numbers_ptr: [*]const f64,
+    min: f64,
+    max: f64,
+    results_ptr: [*]u8
+) void {
+    const numbers = numbers_ptr[0..count];
+    const results = results_ptr[0..count];
+    
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        const n = numbers[i];
+        results[i] = if (n >= min and n <= max) 1 else 0;
+    }
 }
 
 // Batch validation - validates multiple items at once
