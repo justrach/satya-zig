@@ -34,6 +34,16 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 
+    // Export module for use as a dependency
+    const satya_module = b.addModule("satya", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    satya_module.addImport("validator", validator_mod);
+    satya_module.addImport("combinators", combinators_mod);
+    satya_module.addImport("json_validator", json_validator_mod);
+
     // Example: basic_usage
     const basic_example = b.addExecutable(.{
         .name = "basic_usage",

@@ -12,11 +12,49 @@ A high-performance data validation library for Zig, inspired by [Satya](https://
 - **Streaming support** - Process NDJSON with constant memory
 - **Composable validators** - Combine validation rules with combinators
 
+## Installation
+
+### Git Clone (Recommended)
+
+Clone the repository:
+
+```bash
+git clone https://github.com/justrach/satya-zig.git
+cd satya-zig
+zig build test  # Run all tests
+zig build run-basic  # Try examples
+```
+
+Then in your project's `build.zig`:
+
+```zig
+const satya_path = "../satya-zig/src/root.zig";
+exe.root_module.addAnonymousImport("satya", .{
+    .root_source_file = .{ .cwd_relative = satya_path },
+});
+```
+
+### As a Git Submodule
+
+```bash
+cd your-project
+git submodule add https://github.com/justrach/satya-zig.git deps/satya
+```
+
+Then in `build.zig`:
+
+```zig
+const satya_path = "deps/satya/src/root.zig";
+exe.root_module.addAnonymousImport("satya", .{
+    .root_source_file = b.path(satya_path),
+});
+```
+
 ## Quick Start
 
 ```zig
 const std = @import("std");
-const satya = @import("satya-zig");
+const satya = @import("satya");
 
 // Define constrained types
 const Age = satya.BoundedInt(u8, 18, 90);
