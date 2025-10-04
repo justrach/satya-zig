@@ -1,0 +1,26 @@
+# Don't publish test and benchmark files
+benchmark*.ts
+*benchmark*.ts
+test-*.ts
+*-test.ts
+
+# Don't publish build artifacts
+*.log
+node_modules/
+.DS_Store
+
+# Don't publish development files
+tsconfig.json
+.gitignore
+.npmignore
+
+# Keep these for users
+!README.md
+!LICENSE
+!CHANGELOG.md
+!package.json
+!*.wasm
+!schema.ts
+!schema-turbo.ts
+!schema-optimized.ts
+!index.ts
