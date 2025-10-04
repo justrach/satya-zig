@@ -10,7 +10,7 @@
 
 **27.3 million validations/second** - 2.8x faster than Rust, 3.1x faster than C
 
-![Performance Comparison](python-bindings/performance_comparison.png)
+![Performance Comparison](performance_comparison.png)
 
 ```python
 # Validate 10,000 users in 0.37ms
