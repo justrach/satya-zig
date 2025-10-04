@@ -17,14 +17,8 @@ jobs:
             arch: x86_64
             target: x86_64-linux-gnu
           - os: macos-latest
-            arch: arm64
-            target: aarch64-macos-none
-          - os: macos-latest
-            arch: x86_64
-            target: x86_64-macos-none
-          - os: windows-latest
-            arch: x86_64
-            target: x86_64-windows-gnu
+            arch: universal
+            target: universal-macos-none
     
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +47,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]  # Windows support coming soon
     
     steps:
       - uses: actions/checkout@v4
