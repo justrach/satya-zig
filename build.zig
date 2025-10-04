@@ -47,6 +47,22 @@ pub fn build(b: *std.Build) void {
     c_lib.root_module.addImport("validator", validator_mod);
     b.installArtifact(c_lib);
 
+    // Build WASM library for JavaScript bindings
+    const wasm_lib = b.addExecutable(.{
+        .name = "dhi",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/wasm_api.zig"),
+            .target = b.resolveTargetQuery(.{
+                .cpu_arch = .wasm32,
+                .os_tag = .freestanding,
+            }),
+            .optimize = optimize,
+        }),
+    });
+    wasm_lib.entry = .disabled;
+    wasm_lib.rdynamic = true;
+    b.installArtifact(wasm_lib);
+
     // Export module for use as a dependency
     const satya_module = b.addModule("satya", .{
         .root_source_file = b.path("src/root.zig"),

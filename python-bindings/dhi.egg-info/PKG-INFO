@@ -24,7 +24,7 @@ Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Other
 Classifier: Operating System :: OS Independent
 Classifier: Typing :: Typed
-Requires-Python: >=3.8
+Requires-Python: >=3.9
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Provides-Extra: dev

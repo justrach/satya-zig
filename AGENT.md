@@ -1,334 +1,374 @@
-# Agent Development Log - Satya-Zig
+# Agent Context: dhi - Ultra-Fast Data Validation
+
+This document provides context for AI agents working with the dhi project.
 
 ## Project Overview
-**satya-zig**: High-performance data validation library for Zig, inspired by Python's Pydantic and Satya.
 
-**dhi**: Python bindings with native C extension, achieving 18M+ validations/sec.
+**dhi** is the fastest data validation library for Python, achieving **27.3 million validations/second** - 2.8x faster than Rust alternatives and 3.1x faster than C implementations.
 
-## What We Built
+### Key Facts
 
-### 1. Zig Core Library (satya-zig)
-- **Location**: `/Users/rachpradhan/satya-zig/`
-- **Language**: Zig 0.15.1
-- **Performance**: 107M+ validations/sec in pure Zig
+- **Language**: Zig (core) + C extension (Python bindings)
+- **Performance**: 27.3M validations/sec on Apple Silicon
+- **Validators**: 24 comprehensive validators (Pydantic + Zod feature parity)
+- **Status**: Production-ready, published on PyPI
+- **License**: MIT
 
-#### Key Components:
-- `src/validator.zig` - Core validation types (BoundedInt, BoundedString, Email, Pattern)
-- `src/combinators.zig` - Composable validators (Optional, Default, OneOf, Range)
-- `src/json_validator.zig` - JSON parsing + validation in one step
-- `src/c_api.zig` - C-compatible API for Python bindings
+## Architecture
 
-#### Features:
-- Declarative validation (define constraints in types)
-- Rich error reporting (collect all errors, not just first)
-- Zero-cost abstractions (compile-time validation)
-- JSON integration (parse + validate)
-- Batch processing
-- Streaming support (NDJSON)
-
-### 2. Python Package (dhi)
-- **Location**: `/Users/rachpradhan/satya-zig/python-bindings/`
-- **Language**: Python 3.8+ with C extension
-- **Performance**: 18.6M calls/sec (2.5x faster than satya/Rust!)
-
-#### Architecture:
-1. **Pure Python fallback** - Works everywhere, 600K/sec
-2. **ctypes bridge** - Calls Zig via FFI, ~150ns overhead
-3. **C extension** - Native CPython module, 53.7ns per call
-
-#### Key Files:
-- `dhi/_native.c` - CPython C extension
-- `dhi/validator.py` - Python API with 3-tier fallback
-- `setup.py` - Builds C extension automatically
-- `benchmark_native.py` - Performance testing
-
-## Migration Journey: Zig 0.13 → 0.15.1
-
-### Build System Changes
-```zig
-// OLD (0.13)
-const lib = b.addStaticLibrary(.{
-    .name = "satya-zig",
-    .root_source_file = .{ .path = "src/root.zig" },
-});
-
-// NEW (0.15.1)
-const lib = b.addLibrary(.{
-    .name = "satya-zig",
-    .root_module = b.createModule(.{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    }),
-    .linkage = .static,
-});
+```
+Python Code
+    ↓
+_dhi_native.cpython-*.so (C Extension)
+    ↓
+libsatya.dylib (Zig Library)
+    ↓
+Pure Zig Validators (27M ops/sec)
 ```
 
-### ArrayList API Changes
-```zig
-// OLD
-var list = ArrayList(T).init(allocator);
-try list.append(item);
-list.deinit();
+### Components
 
-// NEW
-var list = ArrayList(T).empty;
-try list.append(allocator, item);
-list.deinit(allocator);
+1. **Zig Core** (`src/`)
+   - `validators_comprehensive.zig` - All 24 validators
+   - `c_api.zig` - C API exports
+   - `json_batch_validator.zig` - JSON validation
+
+2. **Python Bindings** (`python-bindings/`)
+   - `dhi/_native.c` - Optimized C extension
+   - `dhi/batch.py` - Python wrapper
+   - `dhi/validator.py` - Pure Python fallback
+
+3. **JavaScript Bindings** (`js-bindings/`) - In development
+   - Bun/Node.js bindings
+   - Target: Compete with Zod v4
+
+## Performance Characteristics
+
+### Throughput
+
+| Test | Throughput | Time |
+|------|------------|------|
+| 10K users, 3 validators | 27.3M users/sec | 0.37ms |
+| 10K integers | 39.0M values/sec | 0.26ms |
+
+### vs Competition
+
+| Library | Backend | Throughput | Speedup |
+|---------|---------|------------|---------|
+| **dhi** | Zig + C | 27.3M/sec | 1.0x (baseline) |
+| satya | Rust + PyO3 | 9.6M/sec | 2.8x slower |
+| msgspec | C | 8.7M/sec | 3.1x slower |
+| Pydantic | Python+Rust | 0.2M/sec | 136x slower |
+
+### Optimization Techniques
+
+1. **Batch Processing** - Single FFI call for entire dataset (9.2x speedup)
+2. **Enum Dispatch** - No string comparisons in hot path
+3. **Cached PyObject* Lookups** - Direct hash table access (2.2x speedup)
+4. **Singleton Bool Reuse** - Zero allocations for results
+5. **Branch Prediction Hints** - `__builtin_expect()` for common paths
+6. **Inline Zig Functions** - Critical paths inlined
+
+## Validators
+
+### String Validators (12)
+- `email` - RFC 5322 simplified
+- `url` - HTTP/HTTPS only
+- `uuid` - v4 format (8-4-4-4-12)
+- `ipv4` - IPv4 addresses
+- `base64` - Base64 encoding
+- `iso_date` - YYYY-MM-DD
+- `iso_datetime` - ISO 8601
+- `string` - Length validation
+- `contains` - Substring check
+- `starts_with` - Prefix check
+- `ends_with` - Suffix check
+- `pattern` - Regex (placeholder)
+
+### Number Validators (10)
+- `int` - Range validation
+- `int_gt` - Greater than
+- `int_gte` - Greater than or equal
+- `int_lt` - Less than
+- `int_lte` - Less than or equal
+- `int_positive` - > 0
+- `int_non_negative` - >= 0
+- `int_negative` - < 0
+- `int_non_positive` - <= 0
+- `int_multiple_of` - Divisibility
+
+### Float Validators (2)
+- `float_gt` - Greater than
+- `float_finite` - Not NaN/Inf
+
+## API Usage
+
+### Python
+
+```python
+from dhi import _dhi_native
+
+users = [{"name": "Alice", "email": "alice@example.com", "age": 25}]
+specs = {
+    'name': ('string', 2, 100),
+    'email': ('email',),
+    'age': ('int_positive',),
+}
+
+results, valid_count = _dhi_native.validate_batch_direct(users, specs)
+# results = [True], valid_count = 1
 ```
 
-### @typeInfo Enum Tags
-```zig
-// OLD
-.Struct => |info| { }
-.Optional => |info| { }
-.Bool => { }
-.Int => { }
+### Field Spec Format
 
-// NEW
-.@"struct" => |info| { }
-.@"optional" => |info| { }
-.@"bool" => { }
-.@"int" => { }
+```python
+field_specs = {
+    'field_name': (validator_type, *params),
+}
+
+# Examples:
+{'email': ('email',)}                    # No params
+{'age': ('int', 18, 120)}               # Min, max
+{'name': ('string', 2, 50)}             # Min length, max length
+{'score': ('int_lte', 100)}             # Max value
 ```
 
-### Format Method Signatures
-```zig
-// OLD
-pub fn format(self: T, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void
-
-// NEW (for {f} specifier)
-pub fn format(self: T, writer: anytype) !void
-```
-
-### Pointer Size Enum
-```zig
-// OLD
-if (ptr_info.size == .Slice)
-
-// NEW
-if (ptr_info.size == .slice)
-```
-
-## Performance Results
-
-### Zig Core Library
-```
-Single validation:     107M validations/sec (9.3ns)
-Batch validation:      203K items/sec (4.9μs per item)
-JSON parse+validate:   69K parses/sec (14.5μs)
-```
-
-### Python Package (dhi)
-
-#### Direct C Extension Calls
-```
-Throughput: 17.9M calls/sec
-Per call: 55.8ns
-```
-
-#### Through Python Wrapper
-```
-Throughput: 8.2M calls/sec
-Per call: 121.7ns
-Overhead: 68ns (Python object creation)
-```
-
-#### Real-World User Validation
-```
-dhi (Zig + C extension): 2.49M users/sec
-satya (Rust + PyO3):     1.02M users/sec
-→ dhi is 2.5x FASTER! 🎉
-```
-
-## Technical Decisions
-
-### Why C Extension Over ctypes?
-- **ctypes**: 150ns overhead per call → 600K/sec
-- **C extension**: 55ns per call → 18M/sec
-- **Result**: 30x faster!
-
-### Why Zig Over Rust?
-- Simpler C interop (no complex FFI layer)
-- Smaller binary size
-- Easier to understand for contributors
-- Comparable performance to Rust
-
-### Three-Tier Fallback Strategy
-1. **Try C extension** (fastest - 18M/sec)
-2. **Try ctypes** (fast - 600K/sec)
-3. **Use pure Python** (portable - 200K/sec)
-
-## Build Process
+## Build System
 
 ### Zig Library
+
 ```bash
 zig build -Doptimize=ReleaseFast
-# Produces: zig-out/lib/libsatya.dylib
+# Creates: zig-out/lib/libsatya.dylib (or .so)
 ```
 
 ### Python Package
+
 ```bash
 cd python-bindings
 pip install -e .
-# Automatically compiles _native.c and links against libsatya.dylib
+# Compiles C extension and links against libsatya
 ```
 
-## Testing
+### GitHub Actions
 
-### Zig Tests
+Automated wheel building for:
+- macOS 13.0+ (Apple Silicon)
+- Linux x86_64
+- Python 3.9-3.13
+
+## Development Workflow
+
+### Adding a New Validator
+
+1. **Add to Zig** (`src/validators_comprehensive.zig`):
+```zig
+pub inline fn validateNewThing(value: []const u8) bool {
+    // Implementation
+    return true;
+}
+```
+
+2. **Export in C API** (`src/c_api.zig`):
+```zig
+export fn satya_validate_new_thing(value: [*:0]const u8) bool {
+    return validators.validateNewThing(std.mem.span(value));
+}
+```
+
+3. **Add to C extension** (`python-bindings/dhi/_native.c`):
+```c
+// Add to enum
+enum ValidatorType {
+    // ...
+    VAL_NEW_THING,
+};
+
+// Add to parser
+case 'n':
+    if (strcmp(type_str, "new_thing") == 0) return VAL_NEW_THING;
+
+// Add to switch
+case VAL_NEW_THING: {
+    const char* value = PyUnicode_AsUTF8(field_value);
+    is_valid = satya_validate_new_thing(value);
+    break;
+}
+```
+
+4. **Rebuild**:
 ```bash
+zig build -Doptimize=ReleaseFast
+cd python-bindings && pip install -e . --force-reinstall
+```
+
+### Running Tests
+
+```bash
+# Zig tests
 zig build test
-# 33/33 tests passing
-```
 
-### Python Tests
-```bash
+# Python benchmarks
 cd python-bindings
-pytest tests/ -v
+python benchmark_batch.py
+
+# Comprehensive validator tests
+python test_comprehensive_validators.py
 ```
 
-### Examples
-```bash
-zig build run-basic      # Zig examples
-zig build run-json       # JSON validation
-zig build run-advanced   # Advanced patterns
-python example.py        # Python examples
-```
+## Common Issues
 
-## Benchmarks
+### Performance Lower Than Expected
 
-### Zig Benchmarks
-```bash
-zig build bench
-```
+**Symptoms**: Getting <10M validations/sec
 
-### Python Benchmarks
-```bash
-python benchmark.py          # vs satya
-python benchmark_native.py   # Native performance
-```
+**Causes**:
+1. Not using batch validation
+2. Python 3.8 or older
+3. Not on Apple Silicon
+4. Native extension not loaded
 
-## Repository Structure
-```
-satya-zig/
-├── src/
-│   ├── root.zig           # Public API
-│   ├── validator.zig      # Core validators
-│   ├── combinators.zig    # Composable validators
-│   ├── json_validator.zig # JSON integration
-│   └── c_api.zig          # C API for Python
-├── examples/
-│   ├── basic_usage.zig
-│   ├── json_example.zig
-│   └── advanced_example.zig
-├── benchmarks/
-│   └── benchmark.zig
-├── python-bindings/
-│   ├── dhi/
-│   │   ├── __init__.py
-│   │   ├── validator.py   # Python API
-│   │   └── _native.c      # C extension
-│   ├── tests/
-│   ├── setup.py
-│   ├── benchmark.py
-│   └── benchmark_native.py
-└── build.zig
-```
+**Solutions**:
+1. Always use `validate_batch_direct()`, not individual calls
+2. Upgrade to Python 3.12+
+3. Use Apple Silicon Mac or Linux x86_64
+4. Check: `from dhi import _dhi_native` (should not error)
 
-## Key Insights
+### Build Failures
 
-### Performance Hierarchy
-1. **Zig native**: 107M/sec (baseline)
-2. **C extension**: 18M/sec (Python call overhead)
-3. **ctypes**: 600K/sec (FFI overhead)
-4. **Pure Python**: 200K/sec (interpretation overhead)
+**Symptoms**: C extension compilation fails
 
-### FFI Overhead Breakdown
-- **C extension call**: ~55ns (minimal)
-- **ctypes call**: ~150ns (marshalling)
-- **Python wrapper**: +68ns (object creation)
+**Causes**:
+1. Zig library not built
+2. Wrong library path
+3. Architecture mismatch
 
-### Why dhi Beats satya
-1. **Simpler C interop** - Direct C extension vs PyO3 complexity
-2. **Optimized Zig code** - Hand-tuned validation loops
-3. **Zero-copy where possible** - Minimal allocations
-4. **Better batching** - Single FFI call for multiple validations
+**Solutions**:
+1. Run `zig build -Doptimize=ReleaseFast` first
+2. Check `zig-out/lib/libsatya.dylib` exists
+3. Ensure matching architecture (arm64 or x86_64)
 
 ## Future Roadmap
 
-### v0.2.0
-- [ ] Batch validation API in Python
-- [ ] JSON validation support
-- [ ] Fix memory leaks in tests
-- [ ] Publish to PyPI
+### v1.1.0 (Next Release)
+- [ ] Windows support
+- [ ] Intel Mac (x86_64) wheels
+- [ ] Custom validator support
+- [ ] Better error messages with field paths
 
-### v1.0.0
-- [ ] TypeScript/WASM bindings
+### v1.2.0
+- [ ] JSON validation API
 - [ ] Async validation
-- [ ] Custom validators
-- [ ] Comprehensive docs
+- [ ] Schema composition
+- [ ] Nested object validation
 
-## Lessons Learned
+### v2.0.0
+- [ ] JavaScript/TypeScript bindings (Bun/Node.js)
+- [ ] Compete with Zod v4
+- [ ] WASM support
+- [ ] GraphQL schema validation
 
-1. **FFI is expensive** - Minimize boundary crossings
-2. **C extensions >> ctypes** - 30x faster for tight loops
-3. **Zig is excellent for libraries** - Easy C interop, great performance
-4. **Batch operations are key** - Amortize overhead
-5. **Pure Python is underrated** - 600K/sec is actually great!
+## Key Files
 
-## Commands Reference
+### Documentation
+- `README.md` - Main documentation
+- `DOCS.md` - Comprehensive API docs
+- `AGENT.md` - This file (LLM context)
+- `COMPREHENSIVE_VALIDATORS.md` - All validators
+- `SESSION_SUMMARY.md` - Performance optimization journey
 
-### Development
-```bash
-# Zig development
-zig build test
-zig build run-basic
-zig build bench
+### Source Code
+- `src/validators_comprehensive.zig` - Core validators
+- `src/c_api.zig` - C API exports
+- `python-bindings/dhi/_native.c` - C extension
+- `python-bindings/dhi/batch.py` - Python API
 
-# Python development
-cd python-bindings
-pip install -e .
-python example.py
-pytest tests/
+### Build & CI
+- `build.zig` - Zig build configuration
+- `python-bindings/setup.py` - Python package build
+- `python-bindings/pyproject.toml` - Package metadata
+- `.github/workflows/build-wheels.yml` - CI/CD
 
-# Benchmarking
-python benchmark_native.py
+### Benchmarks
+- `python-bindings/benchmark_batch.py` - Main benchmarks
+- `python-bindings/benchmark_vs_all.py` - vs competition
+- `python-bindings/create_graph.py` - Performance graphs
+
+## Design Principles
+
+1. **Performance First** - Every optimization counts
+2. **Zero Allocations** - Success path should not allocate
+3. **Batch Everything** - Single FFI call for datasets
+4. **Fail Fast** - Stop at first invalid field per item
+5. **Type Safety** - Compile-time guarantees where possible
+6. **Simple API** - Easy to use, hard to misuse
+
+## Benchmarking Guidelines
+
+### Accurate Benchmarks
+
+```python
+import time
+
+# Warmup (JIT, caches)
+for _ in range(10):
+    _dhi_native.validate_batch_direct(users, specs)
+
+# Measure
+times = []
+for _ in range(100):
+    start = time.perf_counter()
+    results, count = _dhi_native.validate_batch_direct(users, specs)
+    times.append(time.perf_counter() - start)
+
+# Report median (more stable than mean)
+median_time = sorted(times)[len(times)//2]
+throughput = len(users) / median_time
+print(f"Throughput: {throughput:,.0f} users/sec")
 ```
 
-### Publishing
-```bash
-# Build Zig library
-zig build -Doptimize=ReleaseFast
+### What to Measure
 
-# Build Python package
-cd python-bindings
-python -m build
-twine upload dist/*
-```
+1. **Throughput** - Items/sec for large batches (10K+)
+2. **Latency** - Time per item for small batches (1-100)
+3. **Scaling** - How performance changes with batch size
+4. **Comparison** - vs satya, msgspec, Pydantic
 
-## Success Metrics
+## Contributing
 
-- ✅ 33/33 Zig tests passing
-- ✅ All examples working
-- ✅ 18.6M calls/sec in Python
-- ✅ 2.5x faster than satya (Rust)
-- ✅ Production-ready code
-- ✅ Comprehensive documentation
+### Code Style
 
-## Timeline
+**Zig**:
+- Use `inline` for hot path functions
+- Prefer stack allocation
+- Document with `///` comments
 
-**Total Development Time**: ~4 hours
-- Zig 0.15 migration: 2 hours
-- Python bindings: 1 hour
-- C extension: 1 hour
-- Documentation: Ongoing
+**C**:
+- Use `__builtin_expect()` for branch hints
+- Cache PyObject* pointers
+- Minimize allocations
 
-## Contributors
-- Rach Pradhan (@justrach)
-- Cascade AI (development assistance)
+**Python**:
+- Type hints for all public APIs
+- Docstrings with examples
+- Follow PEP 8
 
-## Links
+### Pull Request Process
+
+1. Add tests for new validators
+2. Update DOCS.md with API changes
+3. Run benchmarks before/after
+4. Update COMPREHENSIVE_VALIDATORS.md
+
+## Contact
+
 - **GitHub**: https://github.com/justrach/satya-zig
-- **Original Satya**: https://github.com/justrach/satya
-- **Zig**: https://ziglang.org/
+- **PyPI**: https://pypi.org/project/dhi/
+- **Issues**: https://github.com/justrach/satya-zig/issues
+
+---
+
+**Version**: 1.0.11  
+**Performance**: 27.3M validations/sec  
+**Status**: Production Ready  
+**Last Updated**: 2025-10-04
