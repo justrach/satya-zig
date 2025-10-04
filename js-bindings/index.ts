@@ -26,7 +26,6 @@ const ValidatorType = {
   isoDatetime: 5,
   base64: 6,
   string: 7,
-  positive: 8,
 } as const;
 
 // Cached field specs for batch validation
@@ -77,9 +76,6 @@ function cacheSchema(schema: Schema): CachedSchema {
         type = ValidatorType.string;
         param1 = validator.min;
         param2 = validator.max;
-        break;
-      case "positive":
-        type = ValidatorType.positive;
         break;
     }
 
@@ -252,10 +248,6 @@ export function validate(data: any, schema: Schema): ValidationResult {
         if (!valid)
           errors.push(`${field.name}: String length must be ${field.param1}-${field.param2}`);
         break;
-      case ValidatorType.positive:
-        valid = validators.positive(value);
-        if (!valid) errors.push(`${field.name}: Must be positive`);
-        break;
     }
   }
 
@@ -267,7 +259,13 @@ export function validate(data: any, schema: Schema): ValidationResult {
 
 // OPTIMIZED: Batch validation with single WASM call
 export function validateBatch(items: any[], schema: Schema): ValidationResult[] {
-  // Always use batch for best performance
+  // Smart detection: use optimized batch for large datasets
+  if (items.length < 100) {
+    // Small batch: use individual validation (lower overhead)
+    return items.map((item) => validate(item, schema));
+  }
+
+  // Large batch: use optimized WASM batch validation
   const cached = cacheSchema(schema);
 
   // Build items buffer: [count][field1_len][field1_data][field2_len][field2_data]...
