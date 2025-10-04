@@ -31,8 +31,6 @@ jobs:
       - name: Build Zig library
         run: |
           zig build -Doptimize=ReleaseFast -Dtarget=${{ matrix.target }}
-        env:
-          MACOSX_DEPLOYMENT_TARGET: "11.0"
       
       - name: Upload Zig library artifact
         uses: actions/upload-artifact@v4
@@ -80,6 +78,7 @@ jobs:
           CIBW_BEFORE_BUILD: |
             pip install setuptools wheel
           CIBW_BUILD_VERBOSITY: 1
+          CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=13.0
         with:
           package-dir: ./python-bindings
           output-dir: wheelhouse
