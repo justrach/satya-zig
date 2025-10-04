@@ -36,11 +36,20 @@ class BoundedInt:
         if not isinstance(value, int):
             raise ValidationError("value", f"Expected int, got {type(value).__name__}")
         
-        if value < self.min_val:
-            raise ValidationError("value", f"Value {value} must be >= {self.min_val}")
-        
-        if value > self.max_val:
-            raise ValidationError("value", f"Value {value} must be <= {self.max_val}")
+        # Use native Zig validation if available
+        if _zig.available:
+            if not _zig.validate_int(value, self.min_val, self.max_val):
+                if value < self.min_val:
+                    raise ValidationError("value", f"Value {value} must be >= {self.min_val}")
+                else:
+                    raise ValidationError("value", f"Value {value} must be <= {self.max_val}")
+        else:
+            # Fallback to pure Python
+            if value < self.min_val:
+                raise ValidationError("value", f"Value {value} must be >= {self.min_val}")
+            
+            if value > self.max_val:
+                raise ValidationError("value", f"Value {value} must be <= {self.max_val}")
         
         return value
     
@@ -61,11 +70,20 @@ class BoundedString:
         if not isinstance(value, str):
             raise ValidationError("value", f"Expected str, got {type(value).__name__}")
         
-        if len(value) < self.min_len:
-            raise ValidationError("value", f"String length {len(value)} must be >= {self.min_len}")
-        
-        if len(value) > self.max_len:
-            raise ValidationError("value", f"String length {len(value)} must be <= {self.max_len}")
+        # Use native Zig validation if available
+        if _zig.available:
+            if not _zig.validate_string_length(value, self.min_len, self.max_len):
+                if len(value) < self.min_len:
+                    raise ValidationError("value", f"String length {len(value)} must be >= {self.min_len}")
+                else:
+                    raise ValidationError("value", f"String length {len(value)} must be <= {self.max_len}")
+        else:
+            # Fallback to pure Python
+            if len(value) < self.min_len:
+                raise ValidationError("value", f"String length {len(value)} must be >= {self.min_len}")
+            
+            if len(value) > self.max_len:
+                raise ValidationError("value", f"String length {len(value)} must be <= {self.max_len}")
         
         return value
     
@@ -83,8 +101,14 @@ class Email:
         if not isinstance(value, str):
             raise ValidationError("value", f"Expected str, got {type(value).__name__}")
         
-        if "@" not in value or "." not in value.split("@")[-1]:
-            raise ValidationError("value", "Invalid email format (expected: local@domain)")
+        # Use native Zig validation if available
+        if _zig.available:
+            if not _zig.validate_email(value):
+                raise ValidationError("value", "Invalid email format (expected: local@domain)")
+        else:
+            # Fallback to pure Python
+            if "@" not in value or "." not in value.split("@")[-1]:
+                raise ValidationError("value", "Invalid email format (expected: local@domain)")
         
         return value
     
@@ -99,7 +123,7 @@ class Email:
 # Future: Use ctypes to call into libsatya.so for 100x+ speedup
 
 class _ZigValidator:
-    """Native Zig validator (future implementation)"""
+    """Native Zig validator"""
     
     def __init__(self):
         self._lib = None
@@ -110,12 +134,27 @@ class _ZigValidator:
         lib_path = Path(__file__).parent.parent.parent / "zig-out" / "lib"
         
         # Try different library names
-        for name in ["libsatya.so", "libsatya.dylib", "satya.dll"]:
+        for name in ["libsatya.dylib", "libsatya.so", "satya.dll"]:
             full_path = lib_path / name
             if full_path.exists():
                 try:
                     self._lib = ctypes.CDLL(str(full_path))
-                    print(f"✅ Loaded native Zig library: {name}")
+                    
+                    # Define function signatures
+                    self._lib.satya_validate_int.argtypes = [ctypes.c_int64, ctypes.c_int64, ctypes.c_int64]
+                    self._lib.satya_validate_int.restype = ctypes.c_int32
+                    
+                    self._lib.satya_validate_string_length.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_size_t]
+                    self._lib.satya_validate_string_length.restype = ctypes.c_int32
+                    
+                    self._lib.satya_validate_email.argtypes = [ctypes.c_char_p]
+                    self._lib.satya_validate_email.restype = ctypes.c_int32
+                    
+                    self._lib.satya_version.argtypes = []
+                    self._lib.satya_version.restype = ctypes.c_char_p
+                    
+                    version = self._lib.satya_version().decode('utf-8')
+                    print(f"✅ Loaded native Zig library v{version}: {name}")
                     return
                 except Exception as e:
                     print(f"⚠️  Failed to load {name}: {e}")
@@ -126,6 +165,24 @@ class _ZigValidator:
     def available(self) -> bool:
         """Check if native library is available"""
         return self._lib is not None
+    
+    def validate_int(self, value: int, min_val: int, max_val: int) -> bool:
+        """Validate integer using native Zig"""
+        if not self.available:
+            return min_val <= value <= max_val
+        return bool(self._lib.satya_validate_int(value, min_val, max_val))
+    
+    def validate_string_length(self, value: str, min_len: int, max_len: int) -> bool:
+        """Validate string length using native Zig"""
+        if not self.available:
+            return min_len <= len(value) <= max_len
+        return bool(self._lib.satya_validate_string_length(value.encode('utf-8'), min_len, max_len))
+    
+    def validate_email(self, value: str) -> bool:
+        """Validate email using native Zig"""
+        if not self.available:
+            return "@" in value and "." in value.split("@")[-1]
+        return bool(self._lib.satya_validate_email(value.encode('utf-8')))
 
 
 # Global instance

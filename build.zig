@@ -34,6 +34,19 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 
+    // Build shared library for Python bindings
+    const c_lib = b.addLibrary(.{
+        .name = "satya",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/c_api.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+        .linkage = .dynamic,
+    });
+    c_lib.root_module.addImport("validator", validator_mod);
+    b.installArtifact(c_lib);
+
     // Export module for use as a dependency
     const satya_module = b.addModule("satya", .{
         .root_source_file = b.path("src/root.zig"),
