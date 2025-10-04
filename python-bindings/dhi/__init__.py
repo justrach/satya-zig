@@ -17,6 +17,14 @@ from .validator import (
     HAS_NATIVE_EXT,
 )
 
+from .batch import (
+    BatchValidationResult,
+    validate_users_batch,
+    validate_ints_batch,
+    validate_strings_batch,
+    validate_emails_batch,
+)
+
 # Try to import native extension
 try:
     from . import _dhi_native
@@ -31,4 +39,10 @@ __all__ = [
     "ValidationErrors",
     "HAS_NATIVE_EXT",
     "_dhi_native",
+    # Batch validation
+    "BatchValidationResult",
+    "validate_users_batch",
+    "validate_ints_batch",
+    "validate_strings_batch",
+    "validate_emails_batch",
 ]

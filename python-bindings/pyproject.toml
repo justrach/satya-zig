@@ -4,19 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dhi"
-version = "0.1.0"
-description = "High-performance data validation for Python, powered by Zig"
+version = "1.0.11"
+description = "Ultra-fast data validation for Python - 28M validations/sec, 3x faster than Rust alternatives"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Rach Pradhan", email = "rach@example.com"}
+    {name = "Rach Pradhan", email = "rach@rachpradhan.com"}
 ]
-keywords = ["validation", "data-validation", "pydantic", "zig", "performance"]
+keywords = [
+    "validation", "data-validation", "pydantic", "zig", "performance", 
+    "fast", "validator", "email", "url", "uuid", "schema"
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Quality Assurance",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -24,6 +28,10 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Other",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
 ]
 
 [project.urls]

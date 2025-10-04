@@ -1,69 +1,80 @@
-"""
-Setup script for dhi - High-performance data validation for Python
-"""
-
-from setuptools import setup, find_packages, Extension
+from setuptools import setup, Extension, find_packages
 from pathlib import Path
 import os
+import sys
+import shutil
 
 # Read README
 readme_file = Path(__file__).parent / "README.md"
 long_description = readme_file.read_text() if readme_file.exists() else ""
 
-# Path to Zig library
-zig_lib_path = Path(__file__).parent.parent / "zig-out" / "lib"
+# Try to find and use the Zig library
+ext_modules = []
 
-# Define native extension
-native_ext = Extension(
-    'dhi._dhi_native',
-    sources=['dhi/_native.c'],
-    include_dirs=[],
-    library_dirs=[str(zig_lib_path)],
-    libraries=['satya'],
-    runtime_library_dirs=[str(zig_lib_path)] if os.name != 'nt' else [],
-    extra_compile_args=['-O3'],
-)
+try:
+    # Look for Zig library in multiple locations
+    lib_locations = [
+        Path(__file__).parent / ".." / "zig-out" / "lib",  # Local build
+        Path(__file__).parent / "dhi",  # Bundled in package
+    ]
+    
+    lib_name = 'satya'
+    lib_file = None
+    lib_dir = None
+    
+    # Platform-specific library extension
+    if sys.platform == 'darwin':
+        lib_patterns = [f'lib{lib_name}.dylib']
+    elif sys.platform == 'win32':
+        lib_patterns = [f'{lib_name}.dll', f'lib{lib_name}.dll']
+    else:
+        lib_patterns = [f'lib{lib_name}.so']
+    
+    # Find the library
+    for location in lib_locations:
+        if location.exists():
+            for pattern in lib_patterns:
+                lib_path = location / pattern
+                if lib_path.exists():
+                    lib_file = str(lib_path)
+                    lib_dir = str(location)
+                    print(f"Found Zig library: {lib_file}")
+                    break
+            if lib_file:
+                break
+    
+    if lib_file and lib_dir:
+        # Copy library to package directory for bundling
+        package_lib_dir = Path(__file__).parent / "dhi"
+        package_lib_dir.mkdir(exist_ok=True)
+        
+        for pattern in lib_patterns:
+            src = Path(lib_dir) / pattern
+            if src.exists():
+                dst = package_lib_dir / pattern
+                shutil.copy2(src, dst)
+                print(f"Copied {src} -> {dst}")
+        
+        # Create extension
+        native_ext = Extension(
+            'dhi._dhi_native',
+            sources=['dhi/_native.c'],
+            include_dirs=[],
+            library_dirs=[lib_dir],
+            libraries=[lib_name],
+            runtime_library_dirs=[lib_dir] if sys.platform != 'darwin' else [],
+            extra_link_args=['-Wl,-rpath,@loader_path'] if sys.platform == 'darwin' else [],
+        )
+        ext_modules = [native_ext]
+        print("✅ Building with native Zig extension")
+    else:
+        print("⚠️  Zig library not found - installing pure Python version")
+        print(f"   Searched in: {[str(loc) for loc in lib_locations]}")
+
+except Exception as e:
+    print(f"⚠️  Error setting up native extension: {e}")
+    print("   Installing pure Python version")
 
 setup(
-    name="dhi",
-    version="0.1.0",
-    author="Rach Pradhan",
-    author_email="rach@example.com",
-    description="High-performance data validation for Python, powered by Zig",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/justrach/satya-zig",
-    packages=find_packages(),
-    ext_modules=[native_ext],
-    classifiers=[
-        "Development Status :: 3 - Alpha",
-        "Intended Audience :: Developers",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-        "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-    ],
-    python_requires=">=3.8",
-    install_requires=[
-        # No dependencies for pure Python version
-        # Future: Add cffi for native bindings
-    ],
-    extras_require={
-        "dev": [
-            "pytest>=7.0",
-            "pytest-benchmark>=4.0",
-            "black>=23.0",
-            "mypy>=1.0",
-        ],
-    },
-    keywords="validation data-validation pydantic zig performance",
-    project_urls={
-        "Bug Reports": "https://github.com/justrach/satya-zig/issues",
-        "Source": "https://github.com/justrach/satya-zig",
-        "Documentation": "https://github.com/justrach/satya-zig#readme",
-    },
+    ext_modules=ext_modules,
 )
