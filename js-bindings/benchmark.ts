@@ -25,14 +25,23 @@ console.log("=".repeat(80));
 console.log(`Dataset: ${users.length} users`);
 console.log();
 
-// Benchmark dhi
-console.log("Testing dhi (Zig + Bun FFI)...");
-const dhiStart = performance.now();
-const dhiResults = dhi.validateBatch(users, dhiSchema);
-const dhiTime = performance.now() - dhiStart;
-const dhiValid = dhiResults.filter(r => r.valid).length;
+// Warmup
+for (let i = 0; i < 5; i++) {
+  dhi.validateBatch(users, dhiSchema);
+}
 
-console.log(`  Time: ${dhiTime.toFixed(2)}ms`);
+// Benchmark dhi
+console.log("Testing dhi (Zig + WASM)...");
+const dhiTimes: number[] = [];
+for (let i = 0; i < 20; i++) {
+  const start = performance.now();
+  const results = dhi.validateBatch(users, dhiSchema);
+  dhiTimes.push(performance.now() - start);
+}
+const dhiTime = dhiTimes.sort((a, b) => a - b)[Math.floor(dhiTimes.length / 2)];
+const dhiValid = dhi.validateBatch(users, dhiSchema).filter(r => r.valid).length;
+
+console.log(`  Time: ${dhiTime.toFixed(2)}ms (median of 20 runs)`);
 console.log(`  Throughput: ${(users.length / (dhiTime / 1000)).toLocaleString()} users/sec`);
 console.log(`  Valid: ${dhiValid}/${users.length}`);
 console.log();
@@ -49,15 +58,20 @@ try {
   });
   
   console.log("Testing Zod v4...");
-  const zodStart = performance.now();
+  const zodTimes: number[] = [];
   let zodValid = 0;
-  for (const user of users) {
-    const result = zodSchema.safeParse(user);
-    if (result.success) zodValid++;
+  for (let i = 0; i < 20; i++) {
+    const start = performance.now();
+    zodValid = 0;
+    for (const user of users) {
+      const result = zodSchema.safeParse(user);
+      if (result.success) zodValid++;
+    }
+    zodTimes.push(performance.now() - start);
   }
-  const zodTime = performance.now() - zodStart;
+  const zodTime = zodTimes.sort((a, b) => a - b)[Math.floor(zodTimes.length / 2)];
   
-  console.log(`  Time: ${zodTime.toFixed(2)}ms`);
+  console.log(`  Time: ${zodTime.toFixed(2)}ms (median of 20 runs)`);
   console.log(`  Throughput: ${(users.length / (zodTime / 1000)).toLocaleString()} users/sec`);
   console.log(`  Valid: ${zodValid}/${users.length}`);
   console.log();
