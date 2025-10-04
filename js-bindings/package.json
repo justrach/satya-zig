@@ -1,10 +1,10 @@
 {
   "name": "dhi",
-  "version": "0.3.0",
-  "description": "Ultra-fast validation library - 1.64x faster than Zod. Drop-in replacement with WASM performance.",
-  "main": "index.ts",
-  "module": "index.ts",
-  "types": "schema.ts",
+  "version": "0.4.1",
+  "description": "Ultra-fast validation library - 1.78x faster than Zod. Drop-in replacement with WASM performance. Works with Next.js!",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "type": "module",
   "keywords": [
     "validation",
@@ -15,7 +15,10 @@
     "wasm",
     "typescript",
     "runtime",
-    "type-checking"
+    "type-checking",
+    "nextjs",
+    "next.js",
+    "edge-runtime"
   ],
   "author": "dhi team",
   "license": "MIT",
@@ -29,35 +32,44 @@
     "url": "https://github.com/justrach/satya-zig/issues"
   },
   "files": [
-    "*.ts",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "*.wasm",
     "*.md",
     "!benchmark-*.ts",
-    "!test-*.ts"
+    "!test-*.ts",
+    "!examples/"
   ],
   "scripts": {
     "test": "bun test",
     "bench": "bun run benchmark-final.ts",
-    "build": "echo 'WASM pre-built'",
-    "prepublishOnly": "echo 'WASM already included'"
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && cp dhi.wasm dist/",
+    "prepublishOnly": "npm run build",
+    "test:nextjs": "cd examples/nextjs-app && npm install && npm run build"
   },
   "exports": {
     ".": {
-      "import": "./index.ts",
-      "types": "./schema.ts"
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     },
     "./schema": {
-      "import": "./schema.ts",
-      "types": "./schema.ts"
+      "import": "./dist/schema.js",
+      "types": "./dist/schema.d.ts"
+    },
+    "./schema-nextjs": {
+      "import": "./dist/schema-nextjs.js",
+      "types": "./dist/schema-nextjs.d.ts"
     },
     "./turbo": {
-      "import": "./schema-turbo.ts",
-      "types": "./schema-turbo.ts"
-    }
+      "import": "./dist/schema-turbo.js",
+      "types": "./dist/schema-turbo.d.ts"
+    },
+    "./dhi.wasm": "./dist/dhi.wasm"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.19.19",
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "typescript": "^5"

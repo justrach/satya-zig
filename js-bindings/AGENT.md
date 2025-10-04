@@ -1,16 +1,17 @@
-# dhi JavaScript/TypeScript - Agent Context
+# dhi JavaScript/TypeScript - Comprehensive Agent Guide
 
-Quick reference for AI coding agents working with the dhi validation library.
+Complete reference for AI coding agents working with the dhi validation library.
 
 ## Package Info
 
 ```json
 {
   "name": "dhi",
-  "version": "0.3.0",
+  "version": "0.3.11",
   "npm": "https://www.npmjs.com/package/dhi",
-  "performance": "4.86x faster than Zod",
-  "size": "28KB package, 9.2KB WASM"
+  "performance": "1.78x faster than Zod (official benchmarks)",
+  "size": "28KB package, 9.2KB WASM",
+  "status": "Production Ready ✅"
 }
 ```
 
@@ -33,23 +34,207 @@ const schema = z.object({
 schema.parse({ name: "Alice", age: 30 });
 ```
 
-## File Map
+## 📁 Complete File Breakdown
 
-| File | Purpose | Publish? |
-|------|---------|----------|
-| `dhi.wasm` | WASM binary (9.2KB) | ✅ Yes |
-| `schema.ts` | Main API (1.92x faster) | ✅ Yes |
-| `schema-turbo.ts` | TURBO mode (1.64x faster) | ✅ Yes |
-| `index.ts` | Batch API (8.19x faster) | ✅ Yes |
-| `package.json` | npm metadata | ✅ Yes |
-| `README.md` | User docs | ✅ Yes |
-| `LICENSE` | MIT license | ✅ Yes |
-| `CHANGELOG.md` | Version history | ✅ Yes |
-| `benchmark-*.ts` | Performance tests | ❌ No |
-| `test-*.ts` | Feature tests | ❌ No |
-| `schema-blazing.ts` | Dev/experimental | ❌ No |
-| `schema-fast.ts` | Dev version | ❌ No |
-| `schema-ultra.ts` | Dev version | ❌ No |
+### Core Library Files (Published to npm)
+
+#### `dhi.wasm` (9.2KB)
+**What**: Compiled Zig validators in WebAssembly format
+**Contains**:
+- Email validation (RFC 5322)
+- URL validation
+- UUID validation
+- Memory allocator (alloc/dealloc)
+- SIMD-optimized string operations
+
+**How it works**: TypeScript calls WASM functions by:
+1. Encoding strings to UTF-8 bytes
+2. Allocating WASM memory
+3. Copying bytes to WASM
+4. Calling validator function
+5. Reading result
+6. Deallocating memory
+
+#### `schema.ts` (Main API - 13.7KB)
+**What**: Feature-complete Zod-compatible validation API
+**Performance**: 1.78x faster than Zod (average)
+**Contains**:
+- All validator classes (String, Number, Boolean, Object, Array, etc.)
+- `.strict()` and `.passthrough()` for object validation
+- Transform and refine support
+- Type inference system
+
+**Key optimizations**:
+- Pre-allocated error objects (no GC)
+- Loop unrolling for 1-2 field objects
+- Inline validations
+- Set-based enum lookup
+
+**Usage**:
+```typescript
+import { z } from "dhi/schema";
+
+const UserSchema = z.object({
+  name: z.string().min(2).max(100),
+  email: z.string().email(),
+  age: z.number().positive().int()
+}).strict(); // Throws on unknown keys
+
+const user = UserSchema.parse(data);
+```
+
+#### `schema-turbo.ts` (TURBO Mode - 3.8KB)
+**What**: Ultra-fast validation for simple schemas
+**Performance**: 40.26M ops/sec (1.64x faster than Zod)
+**Contains**:
+- Minimal validator set
+- Zero-copy string length checks
+- Direct number array passing
+- No encoding overhead
+
+**Limitations**:
+- Only string length validation (no email/url/uuid)
+- Only number range validation
+- No transformations or refinements
+
+**Usage**:
+```typescript
+import { turbo } from "dhi/turbo";
+
+const schema = turbo.object({
+  name: turbo.string(2, 100),  // min, max
+  age: turbo.number(0, 120)     // min, max
+});
+
+const result = schema.validate(data);
+```
+
+#### `index.ts` (Batch API - 9.6KB)
+**What**: Specialized API for validating arrays of data
+**Performance**: 8.19x faster than Zod on mixed valid/invalid data
+**Contains**:
+- Early-exit optimization
+- Batch schema builder
+- Mixed data handling
+
+**When to use**: Validating large arrays where some items may fail
+
+**Usage**:
+```typescript
+import dhi from "dhi";
+
+const results = dhi.validateBatch(items, {
+  email: dhi.z.email(),
+  age: dhi.z.positive()
+});
+
+// Returns: { valid: [...], invalid: [...] }
+```
+
+#### `package.json`
+**What**: npm package metadata
+**Key fields**:
+- `version`: 0.3.11
+- `exports`: Defines import paths (/, /schema, /turbo)
+- `files`: What gets published
+- `engines`: Node >=18.0.0
+
+### Documentation Files (Published)
+
+#### `README.md` (6.1KB)
+**What**: User-facing documentation
+**Contains**:
+- Quick start guide
+- Installation instructions
+- Usage examples
+- API reference
+- Performance benchmarks
+- Migration guide from Zod
+
+#### `CHANGELOG.md` (1.7KB)
+**What**: Version history and release notes
+**Format**:
+- Version number
+- Release date
+- New features
+- Performance improvements
+- Breaking changes
+
+#### `LICENSE` (MIT)
+**What**: Open source license
+**Permissions**: Free to use, modify, distribute
+
+#### `CLAUDE.md` (Context for AI assistants)
+**What**: Detailed context for Claude/AI assistants
+**Contains**:
+- Architecture overview
+- Performance benchmarks
+- API reference
+- Common tasks
+- Debugging tips
+
+#### `AGENT.md` (This file)
+**What**: Quick reference for coding agents
+**Contains**: Everything you're reading now!
+
+### Development Files (NOT Published)
+
+#### `benchmark-final.ts` (2.8KB)
+**What**: Comprehensive benchmark comparing all dhi modes vs Zod
+**Run**: `bun run benchmark-final.ts`
+**Output**: Performance comparison table
+
+#### `benchmark-complete.ts`
+**What**: Feature-complete API vs Zod benchmark
+**Tests**: Complex schemas, simple schemas
+**Run**: `bun run benchmark-complete.ts`
+
+#### `benchmark-comprehensive.ts`
+**What**: Detailed benchmarks across multiple scenarios
+**Run**: `bun run benchmark-comprehensive.ts`
+
+#### `benchmark-financial.ts`
+**What**: Real-world financial data validation benchmark
+**Run**: `bun run benchmark-financial.ts`
+
+#### `benchmark-turbo.ts`
+**What**: TURBO mode performance tests
+**Run**: `bun run benchmark-turbo.ts`
+
+#### `test-all-features.ts`
+**What**: Comprehensive feature test suite
+**Tests**: 41 Zod features
+**Run**: `bun run test-all-features.ts`
+**Current**: 38/41 passing (92.7%)
+
+### Supporting Documentation
+
+#### `ADDING_TO_OFFICIAL_BENCHMARKS.md`
+**What**: Guide for submitting dhi to typescript-runtime-type-benchmarks
+**Contains**:
+- Fork and clone instructions
+- Test case creation
+- PR submission process
+
+#### `PUBLISHING.md`
+**What**: Complete guide for publishing to npm
+**Contains**:
+- Pre-publish checklist
+- Manual vs GitHub Actions publishing
+- Post-publish verification
+- Version management
+
+#### `FEATURE_COMPARISON.md`
+**What**: Feature parity comparison with Zod
+
+#### `OPTIMIZATION_NOTES.md`
+**What**: Technical notes on optimization techniques
+
+#### `OPTIMIZATION_ROADMAP.md`
+**What**: Future performance improvement plans
+
+#### `PERFORMANCE_ANALYSIS.md`
+**What**: Deep dive into performance characteristics
 
 ## Architecture
 

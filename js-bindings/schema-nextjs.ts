@@ -1,17 +1,12 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * dhi - BLAZING FAST Complete Schema API
- * ALL features, beats Zod performance
+ * dhi - Next.js Compatible Schema API
+ * Lazy WASM loading, works in Node.js, Edge Runtime, and Browser
  */
 
-import { readFileSync } from "fs";
-import { join } from "path";
-
-const wasmPath = join(import.meta.dir || __dirname, "dhi.wasm");
-const wasmBytes = readFileSync(wasmPath);
-const wasmModule = await WebAssembly.instantiate(wasmBytes, {});
-const wasm = wasmModule.instance.exports as any;
-
-const encoder = new TextEncoder();
+export type ValidationResult<T> = 
+  | { success: true; data: T }
+  | { success: false; error: { issues: Array<{ path: any[]; message: string; code: string }> } };
 
 // Pre-defined error objects (no allocation)
 const ERRORS = {
@@ -31,22 +26,114 @@ function makeError(code: string, message: string): ValidationResult<never> {
   return { success: false, error: { issues: [{ path: [], message, code }] } };
 }
 
-export type ValidationResult<T> = 
-  | { success: true; data: T }
-  | { success: false; error: { issues: Array<{ path: any[]; message: string; code: string }> } };
+// Runtime detection
+const isNode = typeof process !== 'undefined' && process.versions?.node;
+const isBrowser = typeof window !== 'undefined';
+const isEdge = typeof (globalThis as any).EdgeRuntime !== 'undefined';
 
-// Base - no path tracking overhead
-export abstract class Schema<T = any> {
-  abstract _validate(value: any): ValidationResult<T>;
+// WASM state
+let wasmInstance: any = null;
+let wasmInitPromise: Promise<any> | null = null;
+const encoder = new TextEncoder();
+
+// Lazy WASM loader - works in Node, Browser, and Edge
+async function loadWasm(): Promise<any> {
+  if (wasmInstance) return wasmInstance;
+  if (wasmInitPromise) return wasmInitPromise;
+
+  wasmInitPromise = (async () => {
+    try {
+      if (isNode && !isEdge) {
+        // Node.js: Use fs to read WASM file
+        const { readFileSync } = await import('fs');
+        const { join } = await import('path');
+        const { fileURLToPath } = await import('url');
+        
+        // Get directory path (compatible with ESM and CJS)
+        let wasmDir: string;
+        if (typeof import.meta?.url === 'string') {
+          wasmDir = fileURLToPath(new URL('.', import.meta.url));
+        } else if (typeof __dirname !== 'undefined') {
+          wasmDir = __dirname;
+        } else {
+          throw new Error('Cannot resolve WASM path');
+        }
+        
+        const wasmPath = join(wasmDir, 'dhi.wasm');
+        const wasmBytes = readFileSync(wasmPath);
+        const wasmModule = await WebAssembly.instantiate(wasmBytes, {});
+        wasmInstance = wasmModule.instance.exports;
+      } else {
+        // Browser/Edge: Fetch WASM
+        let wasmUrl: string;
+        
+        if (typeof import.meta?.url === 'string') {
+          // ESM: Use import.meta.url
+          wasmUrl = new URL('./dhi.wasm', import.meta.url).href;
+        } else {
+          // Fallback: relative path
+          wasmUrl = './dhi.wasm';
+        }
+        
+        const response = await fetch(wasmUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch WASM: ${response.statusText}`);
+        }
+        
+        const wasmBytes = await response.arrayBuffer();
+        const wasmModule = await WebAssembly.instantiate(wasmBytes, {});
+        wasmInstance = wasmModule.instance.exports;
+      }
+      
+      return wasmInstance;
+    } catch (error) {
+      wasmInitPromise = null; // Reset on error for retry
+      throw new Error(`Failed to load dhi WASM: ${error}`);
+    }
+  })();
+
+  return wasmInitPromise;
+}
+
+// Helper to ensure WASM is loaded
+async function ensureWasm(): Promise<any> {
+  if (!wasmInstance) {
+    await loadWasm();
+  }
+  return wasmInstance;
+}
+
+// Base Schema class
+export class Schema<T = any> {
+  _validate(value: any): ValidationResult<T> | Promise<ValidationResult<T>> {
+    throw new Error('_validate must be implemented');
+  }
   
-  parse(value: any): T {
-    const result = this._validate(value);
+  async parse(value: any): Promise<T> {
+    const result = await this._validate(value);
     if (!result.success) throw new Error('Validation failed');
     return result.data;
   }
   
-  safeParse(value: any): ValidationResult<T> {
-    return this._validate(value);
+  parseSync(value: any): T {
+    const result = this._validate(value);
+    if (result instanceof Promise) {
+      throw new Error('Cannot use parseSync with async validation. Use parse() instead.');
+    }
+    if (!result.success) throw new Error('Validation failed');
+    return result.data;
+  }
+  
+  async safeParse(value: any): Promise<ValidationResult<T>> {
+    return await this._validate(value);
+  }
+  
+  safeParseSync(value: any): ValidationResult<T> {
+    const result = this._validate(value);
+    if (result instanceof Promise) {
+      throw new Error('Cannot use safeParseSync with async validation. Use safeParse() instead.');
+    }
+    return result;
   }
   
   optional() { return new OptionalSchema(this); }
@@ -56,7 +143,7 @@ export abstract class Schema<T = any> {
   refine(check: (value: T) => boolean, message?: string) { return new RefineSchema(this, check, message); }
 }
 
-// String - FULLY OPTIMIZED
+// String Schema with async WASM validation
 export class StringSchema extends Schema<string> {
   _min?: number;
   _max?: number;
@@ -82,55 +169,52 @@ export class StringSchema extends Schema<string> {
   lowercase() { return this.transform(v => v.toLowerCase()); }
   uppercase() { return this.transform(v => v.toUpperCase()); }
   
-  _validate(value: any): ValidationResult<string> {
-    // INLINE: All checks with minimal overhead
+  async _validate(value: any): Promise<ValidationResult<string>> {
     if (typeof value !== 'string') return ERRORS.invalid_type_string;
     
     const len = value.length;
     if (this._min !== undefined && len < this._min) return ERRORS.too_small;
     if (this._max !== undefined && len > this._max) return makeError('too_big', 'Too long');
     
-    // JS string checks (no WASM overhead)
+    // JS string checks (no WASM)
     if (this._startsWith && !value.startsWith(this._startsWith)) return ERRORS.invalid_string;
     if (this._endsWith && !value.endsWith(this._endsWith)) return ERRORS.invalid_string;
     if (this._includes && !value.includes(this._includes)) return ERRORS.invalid_string;
     if (this._regex && !this._regex.test(value)) return ERRORS.invalid_string;
     
-    // WASM checks (only when needed)
-    if (this._email) {
-      // Quick pre-check
-      if (value.indexOf('@') === -1 || value.indexOf('.') === -1) return ERRORS.invalid_email;
+    // WASM checks (async)
+    if (this._email || this._url || this._uuid) {
+      const wasm = await ensureWasm();
       const bytes = encoder.encode(value);
       const ptr = wasm.alloc(bytes.length);
       new Uint8Array(wasm.memory.buffer).set(bytes, ptr);
-      const valid = wasm.validate_email(ptr, bytes.length);
-      wasm.dealloc(ptr, bytes.length);
-      if (!valid) return ERRORS.invalid_email;
-    }
-    
-    if (this._url) {
-      const bytes = encoder.encode(value);
-      const ptr = wasm.alloc(bytes.length);
-      new Uint8Array(wasm.memory.buffer).set(bytes, ptr);
-      const valid = wasm.validate_url(ptr, bytes.length);
-      wasm.dealloc(ptr, bytes.length);
-      if (!valid) return ERRORS.invalid_string;
-    }
-    
-    if (this._uuid) {
-      const bytes = encoder.encode(value);
-      const ptr = wasm.alloc(bytes.length);
-      new Uint8Array(wasm.memory.buffer).set(bytes, ptr);
-      const valid = wasm.validate_uuid(ptr, bytes.length);
-      wasm.dealloc(ptr, bytes.length);
-      if (!valid) return ERRORS.invalid_string;
+      
+      try {
+        if (this._email) {
+          if (value.indexOf('@') === -1 || value.indexOf('.') === -1) return ERRORS.invalid_email;
+          const valid = wasm.validate_email(ptr, bytes.length);
+          if (!valid) return ERRORS.invalid_email;
+        }
+        
+        if (this._url) {
+          const valid = wasm.validate_url(ptr, bytes.length);
+          if (!valid) return ERRORS.invalid_string;
+        }
+        
+        if (this._uuid) {
+          const valid = wasm.validate_uuid(ptr, bytes.length);
+          if (!valid) return ERRORS.invalid_string;
+        }
+      } finally {
+        wasm.dealloc(ptr, bytes.length);
+      }
     }
     
     return { success: true, data: value };
   }
 }
 
-// Number - FULLY OPTIMIZED
+// Number Schema (no WASM needed - sync)
 export class NumberSchema extends Schema<number> {
   _min?: number;
   _max?: number;
@@ -171,7 +255,7 @@ export class NumberSchema extends Schema<number> {
   }
 }
 
-// Primitives - INLINE
+// Primitives (all sync)
 export class BooleanSchema extends Schema<boolean> {
   _validate(v: any): ValidationResult<boolean> {
     return typeof v === 'boolean' ? { success: true, data: v } : ERRORS.invalid_type_boolean;
@@ -196,7 +280,7 @@ export class AnySchema extends Schema<any> {
   }
 }
 
-// Enum - Set lookup
+// Enum Schema (sync)
 export class EnumSchema<T extends string> extends Schema<T> {
   private _set: Set<string>;
   
@@ -210,7 +294,7 @@ export class EnumSchema<T extends string> extends Schema<T> {
   }
 }
 
-// Array - optimized loop
+// Array Schema (can be async if element schema is async)
 export class ArraySchema<T> extends Schema<T[]> {
   private _min?: number;
   private _max?: number;
@@ -220,7 +304,7 @@ export class ArraySchema<T> extends Schema<T[]> {
   min(l: number): this { this._min = l; return this; }
   max(l: number): this { this._max = l; return this; }
   
-  _validate(value: any): ValidationResult<T[]> {
+  async _validate(value: any): Promise<ValidationResult<T[]>> {
     if (!Array.isArray(value)) return ERRORS.invalid_type_array;
     
     const len = value.length;
@@ -229,7 +313,7 @@ export class ArraySchema<T> extends Schema<T[]> {
     
     const result: T[] = [];
     for (let i = 0; i < len; i++) {
-      const r = this.element._validate(value[i]);
+      const r = await this.element._validate(value[i]);
       if (!r.success) return r as any;
       result.push(r.data);
     }
@@ -238,7 +322,7 @@ export class ArraySchema<T> extends Schema<T[]> {
   }
 }
 
-// Object - MAXIMUM OPTIMIZATION
+// Object Schema (can be async if any field schema is async)
 export class ObjectSchema<T extends Record<string, any>> extends Schema<T> {
   private _keys: string[];
   private _schemas: Schema<any>[];
@@ -266,7 +350,7 @@ export class ObjectSchema<T extends Record<string, any>> extends Schema<T> {
     return this;
   }
   
-  _validate(value: any): ValidationResult<T> {
+  async _validate(value: any): Promise<ValidationResult<T>> {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
       return ERRORS.invalid_type_object;
     }
@@ -283,33 +367,15 @@ export class ObjectSchema<T extends Record<string, any>> extends Schema<T> {
     
     const result: any = {};
     
-    // Unrolled loop for common cases
-    if (this._len === 1) {
-      const k = this._keys[0];
-      const r = this._schemas[0]._validate(value[k]);
+    // Validate all fields
+    for (let i = 0; i < this._len; i++) {
+      const k = this._keys[i];
+      const r = await this._schemas[i]._validate(value[k]);
       if (!r.success) return r;
       result[k] = r.data;
-    } else if (this._len === 2) {
-      const k0 = this._keys[0];
-      const r0 = this._schemas[0]._validate(value[k0]);
-      if (!r0.success) return r0;
-      result[k0] = r0.data;
-      
-      const k1 = this._keys[1];
-      const r1 = this._schemas[1]._validate(value[k1]);
-      if (!r1.success) return r1;
-      result[k1] = r1.data;
-    } else {
-      // General case
-      for (let i = 0; i < this._len; i++) {
-        const k = this._keys[i];
-        const r = this._schemas[i]._validate(value[k]);
-        if (!r.success) return r;
-        result[k] = r.data;
-      }
     }
     
-    // Handle passthrough mode - include extra keys
+    // Handle passthrough mode
     if (this._passthrough) {
       for (const k in value) {
         if (!this._keys.includes(k)) {
@@ -325,37 +391,37 @@ export class ObjectSchema<T extends Record<string, any>> extends Schema<T> {
 // Modifiers
 export class OptionalSchema<T> extends Schema<T | undefined> {
   constructor(private inner: Schema<T>) { super(); }
-  _validate(v: any): ValidationResult<T | undefined> {
-    return v === undefined ? { success: true, data: undefined } : this.inner._validate(v);
+  async _validate(v: any): Promise<ValidationResult<T | undefined>> {
+    return v === undefined ? { success: true, data: undefined } : await this.inner._validate(v);
   }
 }
 
 export class NullableSchema<T> extends Schema<T | null> {
   constructor(private inner: Schema<T>) { super(); }
-  _validate(v: any): ValidationResult<T | null> {
-    return v === null ? { success: true, data: null } : this.inner._validate(v);
+  async _validate(v: any): Promise<ValidationResult<T | null>> {
+    return v === null ? { success: true, data: null } : await this.inner._validate(v);
   }
 }
 
 export class DefaultSchema<T> extends Schema<T> {
   constructor(private inner: Schema<T>, private defaultValue: T) { super(); }
-  _validate(v: any): ValidationResult<T> {
-    return v === undefined ? { success: true, data: this.defaultValue } : this.inner._validate(v);
+  async _validate(v: any): Promise<ValidationResult<T>> {
+    return v === undefined ? { success: true, data: this.defaultValue } : await this.inner._validate(v);
   }
 }
 
 export class TransformSchema<T, U> extends Schema<U> {
   constructor(private inner: Schema<T>, private transformer: (value: T) => U) { super(); }
-  _validate(v: any): ValidationResult<U> {
-    const r = this.inner._validate(v);
+  async _validate(v: any): Promise<ValidationResult<U>> {
+    const r = await this.inner._validate(v);
     return r.success ? { success: true, data: this.transformer(r.data) } : r as any;
   }
 }
 
 export class RefineSchema<T> extends Schema<T> {
   constructor(private inner: Schema<T>, private check: (value: T) => boolean, private message?: string) { super(); }
-  _validate(v: any): ValidationResult<T> {
-    const r = this.inner._validate(v);
+  async _validate(v: any): Promise<ValidationResult<T>> {
+    const r = await this.inner._validate(v);
     if (!r.success) return r;
     return this.check(r.data) ? r : makeError('custom', this.message || 'Invalid value');
   }
@@ -363,9 +429,9 @@ export class RefineSchema<T> extends Schema<T> {
 
 export class UnionSchema extends Schema<any> {
   constructor(private options: Schema<any>[]) { super(); }
-  _validate(v: any): ValidationResult<any> {
+  async _validate(v: any): Promise<ValidationResult<any>> {
     for (let i = 0; i < this.options.length; i++) {
-      const r = this.options[i]._validate(v);
+      const r = await this.options[i]._validate(v);
       if (r.success) return r;
     }
     return makeError('invalid_union', 'Invalid union');
@@ -391,3 +457,12 @@ export const z = {
 };
 
 export type infer<T extends Schema<any>> = T extends Schema<infer U> ? U : never;
+
+// Export init function for explicit initialization (optional)
+export async function init(): Promise<void> {
+  await loadWasm();
+}
+
+// For compatibility, also export preloaded schemas
+// These will auto-load WASM on first use
+export { z as default };
