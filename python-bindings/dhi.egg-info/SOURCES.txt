@@ -3,6 +3,7 @@ README.md
 pyproject.toml
 setup.py
 dhi/__init__.py
+dhi/_native.c
 dhi/validator.py
 dhi.egg-info/PKG-INFO
 dhi.egg-info/SOURCES.txt

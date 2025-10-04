@@ -2,12 +2,27 @@
 Setup script for dhi - High-performance data validation for Python
 """
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 from pathlib import Path
+import os
 
 # Read README
-readme_file = Path(__file__).parent.parent / "README.md"
+readme_file = Path(__file__).parent / "README.md"
 long_description = readme_file.read_text() if readme_file.exists() else ""
+
+# Path to Zig library
+zig_lib_path = Path(__file__).parent.parent / "zig-out" / "lib"
+
+# Define native extension
+native_ext = Extension(
+    'dhi._dhi_native',
+    sources=['dhi/_native.c'],
+    include_dirs=[],
+    library_dirs=[str(zig_lib_path)],
+    libraries=['satya'],
+    runtime_library_dirs=[str(zig_lib_path)] if os.name != 'nt' else [],
+    extra_compile_args=['-O3'],
+)
 
 setup(
     name="dhi",
@@ -19,6 +34,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/justrach/satya-zig",
     packages=find_packages(),
+    ext_modules=[native_ext],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

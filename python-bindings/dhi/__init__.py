@@ -14,7 +14,14 @@ from .validator import (
     Email,
     ValidationError,
     ValidationErrors,
+    HAS_NATIVE_EXT,
 )
+
+# Try to import native extension
+try:
+    from . import _dhi_native
+except ImportError:
+    _dhi_native = None
 
 __all__ = [
     "BoundedInt",
@@ -22,4 +29,6 @@ __all__ = [
     "Email",
     "ValidationError",
     "ValidationErrors",
+    "HAS_NATIVE_EXT",
+    "_dhi_native",
 ]

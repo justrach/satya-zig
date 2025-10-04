@@ -7,6 +7,14 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Try to import native extension first (fastest)
+try:
+    from . import _dhi_native
+    HAS_NATIVE_EXT = True
+except ImportError:
+    HAS_NATIVE_EXT = False
+    _dhi_native = None
+
 
 class ValidationError(Exception):
     """Single validation error"""
@@ -36,8 +44,14 @@ class BoundedInt:
         if not isinstance(value, int):
             raise ValidationError("value", f"Expected int, got {type(value).__name__}")
         
-        # Use native Zig validation if available
-        if _zig.available:
+        # Use native extension (fastest) or ctypes (fast) or pure Python (fallback)
+        if HAS_NATIVE_EXT:
+            if not _dhi_native.validate_int(value, self.min_val, self.max_val):
+                if value < self.min_val:
+                    raise ValidationError("value", f"Value {value} must be >= {self.min_val}")
+                else:
+                    raise ValidationError("value", f"Value {value} must be <= {self.max_val}")
+        elif _zig.available:
             if not _zig.validate_int(value, self.min_val, self.max_val):
                 if value < self.min_val:
                     raise ValidationError("value", f"Value {value} must be >= {self.min_val}")
@@ -70,8 +84,14 @@ class BoundedString:
         if not isinstance(value, str):
             raise ValidationError("value", f"Expected str, got {type(value).__name__}")
         
-        # Use native Zig validation if available
-        if _zig.available:
+        # Use native extension (fastest) or ctypes (fast) or pure Python (fallback)
+        if HAS_NATIVE_EXT:
+            if not _dhi_native.validate_string_length(value, self.min_len, self.max_len):
+                if len(value) < self.min_len:
+                    raise ValidationError("value", f"String length {len(value)} must be >= {self.min_len}")
+                else:
+                    raise ValidationError("value", f"String length {len(value)} must be <= {self.max_len}")
+        elif _zig.available:
             if not _zig.validate_string_length(value, self.min_len, self.max_len):
                 if len(value) < self.min_len:
                     raise ValidationError("value", f"String length {len(value)} must be >= {self.min_len}")
@@ -101,8 +121,11 @@ class Email:
         if not isinstance(value, str):
             raise ValidationError("value", f"Expected str, got {type(value).__name__}")
         
-        # Use native Zig validation if available
-        if _zig.available:
+        # Use native extension (fastest) or ctypes (fast) or pure Python (fallback)
+        if HAS_NATIVE_EXT:
+            if not _dhi_native.validate_email(value):
+                raise ValidationError("value", "Invalid email format (expected: local@domain)")
+        elif _zig.available:
             if not _zig.validate_email(value):
                 raise ValidationError("value", "Invalid email format (expected: local@domain)")
         else:
