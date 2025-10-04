@@ -267,13 +267,7 @@ export function validate(data: any, schema: Schema): ValidationResult {
 
 // OPTIMIZED: Batch validation with single WASM call
 export function validateBatch(items: any[], schema: Schema): ValidationResult[] {
-  // Smart detection: use optimized batch for large datasets
-  if (items.length < 100) {
-    // Small batch: use individual validation (lower overhead)
-    return items.map((item) => validate(item, schema));
-  }
-
-  // Large batch: use optimized WASM batch validation
+  // Always use batch for best performance
   const cached = cacheSchema(schema);
 
   // Build items buffer: [count][field1_len][field1_data][field2_len][field2_data]...

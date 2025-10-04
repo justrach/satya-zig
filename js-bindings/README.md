@@ -4,16 +4,19 @@
 
 ## 🚀 Performance
 
-**1.16x faster than Zod v4** with only **4KB** WASM module!
+**1.62x faster than Zod v4** - **14.6M validations/sec**!
 
 ```
-Benchmark: 10,000 users with 4 validators each
+Benchmark: 10,000 users with 4 validators each (40,000 validations)
 
-dhi (Zig + WASM):  1,246,378 users/sec
-Zod v4:            1,071,510 users/sec
+dhi (Zig + WASM):  3,656,251 users/sec = 14.6M validations/sec
+Zod v4:            2,260,951 users/sec = 9.0M validations/sec
 
-dhi is 1.16x faster! 🔥
+dhi is 1.62x faster! 🔥
 ```
+
+**vs Python**: JavaScript achieves 14.6M/sec vs Python's 27.3M/sec (1.9x gap)  
+Remaining gap due to JavaScript → WASM boundary and string encoding overhead.
 
 ## ✨ Features
 
