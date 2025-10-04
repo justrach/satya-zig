@@ -17,8 +17,11 @@ jobs:
             arch: x86_64
             target: x86_64-linux-gnu
           - os: macos-latest
-            arch: universal
-            target: universal-macos-none
+            arch: arm64
+            target: aarch64-macos-none
+          - os: macos-latest
+            arch: x86_64
+            target: x86_64-macos-none
     
     steps:
       - uses: actions/checkout@v4
