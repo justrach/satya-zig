@@ -239,6 +239,8 @@ export class ObjectSchema<T extends Record<string, any>> extends Schema<T> {
   private _keys: string[];
   private _schemas: Schema<any>[];
   private _len: number;
+  private _strict = false;
+  private _passthrough = false;
   
   constructor(shape: { [K in keyof T]: Schema<T[K]> }) {
     super();
@@ -248,9 +250,31 @@ export class ObjectSchema<T extends Record<string, any>> extends Schema<T> {
     this._len = this._keys.length;
   }
   
+  strict(): this {
+    this._strict = true;
+    this._passthrough = false;
+    return this;
+  }
+  
+  passthrough(): this {
+    this._passthrough = true;
+    this._strict = false;
+    return this;
+  }
+  
   _validate(value: any): ValidationResult<T> {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
       return ERRORS.invalid_type_object;
+    }
+    
+    // Check for unknown keys if strict mode
+    if (this._strict) {
+      const valueKeys = Object.keys(value);
+      for (const k of valueKeys) {
+        if (!this._keys.includes(k)) {
+          return { success: false, error: { issues: [{ path: [], message: `Unknown key: ${k}`, code: 'unrecognized_keys' }] } };
+        }
+      }
     }
     
     const result: any = {};
@@ -278,6 +302,15 @@ export class ObjectSchema<T extends Record<string, any>> extends Schema<T> {
         const r = this._schemas[i]._validate(value[k]);
         if (!r.success) return r;
         result[k] = r.data;
+      }
+    }
+    
+    // Handle passthrough mode - include extra keys
+    if (this._passthrough) {
+      for (const k in value) {
+        if (!this._keys.includes(k)) {
+          result[k] = value[k];
+        }
       }
     }
     
