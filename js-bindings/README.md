@@ -270,6 +270,7 @@ MIT
 - [GitHub](https://github.com/justrach/satya-zig)
 - [npm](https://www.npmjs.com/package/dhi)
 - [PyPI (Python)](https://pypi.org/project/dhi/)
+- [DHI JS Bindings](https://github.com/justrach/dhi-zig/tree/main/js-bindings)
 
 ---
 
