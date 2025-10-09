@@ -1,6 +1,6 @@
 {
   "name": "dhi",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Ultra-fast validation library - 1.78x faster than Zod. Drop-in replacement with WASM performance. Works with Next.js!",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
